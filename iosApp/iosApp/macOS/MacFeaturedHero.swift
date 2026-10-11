@@ -20,6 +20,13 @@ struct MacFeaturedHero: View {
     /// The logo that has finished loading. Until a title's logo is in, its
     /// name is shown as text, so the hero is never untitled.
     @State private var loadedLogoURL: String?
+    private var translation: CardDescriptionTranslation { .shared }
+
+    private struct TranslationTrigger: Hashable {
+        let contentId: String
+        let language: String?
+        let mode: MetadataAIStatus.OnViewMode
+    }
 
     private var item: SectionItem? {
         guard !section.items.isEmpty else { return nil }
@@ -49,6 +56,19 @@ struct MacFeaturedHero: View {
             .onHover { isHovering = $0 }
             .task(id: AdvanceTrigger(index: index, isPaused: isPaused, ids: section.items.map(\.contentId))) {
                 await advanceAfterDelay()
+            }
+            // Only the slide on show translates on view; the others wait
+            // until they come up.
+            .task(id: TranslationTrigger(
+                contentId: item.contentId,
+                language: translatablePresentation(for: item)?.pendingLanguage,
+                mode: AICapabilities.shared.metadataOnView
+            )) {
+                translation.cardDidAppear(
+                    contentId: item.contentId,
+                    pendingLanguage: translatablePresentation(for: item)?.pendingLanguage,
+                    libraryId: nil
+                )
             }
             .onChange(of: section.items.map(\.contentId)) { _, ids in
                 // A reload can shorten the section; keep the label and the
@@ -128,14 +148,7 @@ struct MacFeaturedHero: View {
                     .lineLimit(1)
             }
 
-            if !EpisodeSpoilerPreferences.shared.settings.hidesOverview(for: item),
-               let overview = item.overview, !overview.isEmpty {
-                Text(overview)
-                    .font(.siloBody)
-                    .foregroundStyle(Color.siloSecondaryText)
-                    .lineLimit(3)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            overview(for: item)
 
             HStack(spacing: SiloTheme.spacing) {
                 // A series has nothing to play directly; More Info opens it.
@@ -166,6 +179,60 @@ struct MacFeaturedHero: View {
         }
         .frame(maxWidth: SiloTheme.macHeroTextWidth, alignment: .leading)
         .padding(.leading, HomeFeedMetrics.gutter)
+    }
+
+    /// The synopsis, with its on-view translation status and, in the
+    /// server's `button` mode, a Translate chip.
+    @ViewBuilder
+    private func overview(for item: SectionItem) -> some View {
+        if let presentation = translatablePresentation(for: item),
+           let overview = presentation.overview, !overview.isEmpty {
+            let offersTranslation = translation.offersTranslation(
+                contentId: item.contentId,
+                pendingLanguage: presentation.pendingLanguage
+            )
+            VStack(alignment: .leading, spacing: SiloTheme.smallPadding) {
+                Text(overview)
+                    .font(.siloBody)
+                    .foregroundStyle(Color.siloSecondaryText)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .opacity(presentation.status == .translating ? 0.5 : 1)
+                if presentation.status != nil || offersTranslation {
+                    HStack(spacing: SiloTheme.spacing) {
+                        if let status = presentation.status {
+                            DescriptionTranslationStatusLabel(status: status)
+                        }
+                        if offersTranslation {
+                            Button {
+                                translation.translate(
+                                    contentId: item.contentId,
+                                    pendingLanguage: presentation.pendingLanguage,
+                                    libraryId: nil
+                                )
+                            } label: {
+                                Label("Translate", systemImage: MachineTranslation.symbol)
+                                    .font(.siloCaption)
+                                    .foregroundStyle(Color.siloSecondaryText)
+                                    .padding(.horizontal, SiloTheme.spacing)
+                                    .padding(.vertical, 2)
+                                    .overlay(Capsule().stroke(Color.siloChromeSelectedBorder))
+                                    .contentShape(Capsule())
+                            }
+                            .buttonStyle(.siloFlat)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// The slide's description and its translation state, or nil while
+    /// spoiler protection hides an unwatched episode's description: a
+    /// translation must neither show it nor start for it.
+    private func translatablePresentation(for item: SectionItem) -> CardDescriptionTranslation.Presentation? {
+        guard !EpisodeSpoilerPreferences.shared.settings.hidesOverview(for: item) else { return nil }
+        return translation.presentation(for: item)
     }
 
     /// The title's logo artwork where the server has one, otherwise its name.

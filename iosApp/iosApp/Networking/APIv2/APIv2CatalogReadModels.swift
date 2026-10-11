@@ -34,6 +34,8 @@ enum APIv2CatalogRead {
         let isSpecials: Bool?
         let lastAirDate: String?
         @ArtworkURL var logoUrl: String?
+        /// Localized fields ("overview", "tagline") machine-translated by AI.
+        let machineTranslatedFields: [String]?
         let networks: [String]?
         let originalLanguage: String?
         let originalTitle: String?
@@ -78,6 +80,7 @@ enum APIv2CatalogRead {
         let contentId: String
         let episodeCount: Int64
         let isSpecials: Bool?
+        let machineTranslatedFields: [String]?
         let overview: String?
         let posterThumbhash: String?
         @ArtworkURL var posterUrl: String?
@@ -93,7 +96,9 @@ enum APIv2CatalogRead {
         let episodeNumber: Int64
         let files: [EpisodeFile]?
         let imdbId: String?
+        let machineTranslatedFields: [String]?
         let overview: String?
+        let pendingTranslationLanguage: String?
         let runtime: Int64
         let seasonNumber: Int64
         let stillThumbhash: String?
